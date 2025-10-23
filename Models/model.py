@@ -126,12 +126,40 @@ class UpstreamTransformerXLSR(nn.Module):
         )
 
     def simple_forward(self, x, x_len):
-        x = self.processor(x, sampling_rate=16000, return_tensors="pt")["input_values"].squeeze(0).to("cuda")
-        x = self.encoder(x).last_hidden_state
-        x = self.attention_pool(x)
-        # x = torch.mean(x, dim=1)
-        language = self.language_classifier(x)
-        return language
+        # 对批次中的每个样本单独处理，以避免一次性处理整个批次导致内存溢出
+        batch_size = x.size(0)
+        outputs = []
+        
+        for i in range(batch_size):
+            # 获取单个样本
+            sample = x[i].squeeze().detach().cpu().numpy()
+            length = int(x_len[i])
+            
+            # 如果有长度信息，裁剪到指定长度
+            if length > 0 and length <= len(sample):
+                sample = sample[:length]
+            
+            # 处理单个样本
+            try:
+                # 转换为模型输入格式
+                processed = self.processor(sample, sampling_rate=16000, return_tensors="pt")["input_values"].to(self.encoder.device)
+                
+                # 前向传播
+                encoder_output = self.encoder(processed).last_hidden_state
+                
+                # 注意力池化
+                pooled = self.attention_pool(encoder_output)
+                
+                # 分类
+                logits = self.language_classifier(pooled)
+                outputs.append(logits)
+            except Exception as e:
+                print(f"Error processing sample {i}: {e}")
+                # 创建一个零向量作为回退
+                outputs.append(torch.zeros(1, 14).to(self.encoder.device))
+        
+        # 堆叠所有输出
+        return torch.cat(outputs, dim=0)
     
     def forward(self, x, x_len):
         return self.simple_forward(x, x_len)
