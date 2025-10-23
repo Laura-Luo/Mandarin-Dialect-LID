@@ -3,9 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import pytorch_lightning as pl
-from pl_bolts.optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
 
-from Models.model import UpstreamTransformer, UpstreamTransformerXLSR, PretrainedLangID
+from Models.model import UpstreamTransformerXLSR
 from utils import CrossEntropyLoss
 
 
@@ -15,9 +14,7 @@ class LightningModel(pl.LightningModule):
         # HPARAMS
         self.save_hyperparameters()
         self.models = {
-            'UpstreamTransformer': UpstreamTransformer, # wav2vec, hubert
-            'UpstreamTransformerXLSR': UpstreamTransformerXLSR, # XLSR
-            'PretrainedLangID': PretrainedLangID,
+            'UpstreamTransformerXLSR': UpstreamTransformerXLSR, # 当前可用模型
         }
         self.model = self.models[HPARAMS['model_type']](upstream_model=HPARAMS['upstream_model'], feature_dim=HPARAMS['feature_dim'], unfreeze_last_conv_layers=HPARAMS['unfreeze_last_conv_layers'])
         self.classification_criterion = CrossEntropyLoss()
@@ -57,7 +54,7 @@ class LightningModel(pl.LightningModule):
                 'labels': y_l.argmax(dim=1).detach().cpu().numpy().astype(int),
                 }
     
-    def training_epoch_end(self, outputs):
+    def on_training_epoch_end(self, outputs):
         n_batch = len(outputs)
         loss = torch.tensor([x['loss'] for x in outputs]).mean()
         language_acc = torch.tensor([x['language_acc'] for x in outputs]).mean()
@@ -75,14 +72,15 @@ class LightningModel(pl.LightningModule):
         winners = y_hat_l.argmax(dim=1)
         corrects = (winners == y_l.argmax(dim=1))
         language_acc = corrects.sum().float() / float( y_hat_l.size(0) )
-
-        return {'val_loss':loss, 
-                'val_language_acc':language_acc,
-                }
-
-    def validation_epoch_end(self, outputs):
-        val_loss = torch.tensor([x['val_loss'] for x in outputs]).mean()
-        language_acc = torch.tensor([x['val_language_acc'] for x in outputs]).mean()
         
-        self.log('val/loss' , val_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val/acc',language_acc, on_step=False, on_epoch=True, prog_bar=True)
+        # 在PyTorch Lightning 2.0+中，直接在step中记录日志
+        self.log('val/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('val/acc', language_acc, on_step=True, on_epoch=True, prog_bar=True)
+        
+        # 返回loss（可选）
+        return loss
+
+    def on_validation_epoch_end(self):
+        # 注意：在PyTorch Lightning 2.0+中，我们需要手动在validation_step中保存结果
+        # 这里简化了实现，仅记录日志
+        pass

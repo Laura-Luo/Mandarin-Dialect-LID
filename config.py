@@ -1,7 +1,12 @@
 import os
 import json
 
-with open("config.json", "r") as jsonfile:
+import os
+# 获取脚本所在目录的绝对路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# 构建配置文件的绝对路径
+config_path = os.path.join(script_dir, "config.json")
+with open(config_path, "r") as jsonfile:
     config = json.load(jsonfile)
 
 class LIDConfig(object):

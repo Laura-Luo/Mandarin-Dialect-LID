@@ -14,7 +14,7 @@ from config import LIDConfig
 
 # SEED
 SEED=100
-pl.utilities.seed.seed_everything(SEED)
+pl.seed_everything(SEED)
 torch.manual_seed(SEED)
 
 os.environ['WANDB_MODE'] = 'online'
@@ -43,7 +43,6 @@ if __name__ == "__main__":
     parser.add_argument('--unfreeze_last_conv_layers', action='store_true')
     parser.add_argument('--noise_dataset_path', type=str, default=None)
     
-    parser = pl.Trainer.add_argparse_args(parser)
     hparams = parser.parse_args()
     print(f'Training Model on LID Dataset\n#Cores = {hparams.n_workers}\t#GPU = {hparams.gpu}')
 
@@ -97,9 +96,10 @@ if __name__ == "__main__":
 
     trainer = Trainer(
         fast_dev_run=hparams.dev, 
-        gpus=hparams.gpu, 
+        devices=hparams.gpu,
+        accelerator='gpu' if hparams.gpu > 0 else 'cpu',
+        accumulate_grad_batches=4,
         max_epochs=hparams.epochs, 
-        checkpoint_callback=True,
         callbacks=[
             EarlyStopping(
                 monitor='val/acc',
@@ -114,4 +114,4 @@ if __name__ == "__main__":
         logger=logger,
         )
 
-    trainer.fit(model, train_dataloader=trainloader, val_dataloaders=valloader)
+    trainer.fit(model, trainloader, valloader)
