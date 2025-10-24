@@ -119,10 +119,11 @@ class UpstreamTransformerXLSR(nn.Module):
 
         self.attention_pool = SelfAttentionPooling(feature_dim)
         
+        # 二分类任务，输出维度改为2
         self.language_classifier = nn.Sequential(
             nn.Linear(feature_dim, 512),
             nn.ReLU(),
-            nn.Linear(512, 14)
+            nn.Linear(512, 2)
         )
 
     def simple_forward(self, x, x_len):
@@ -155,8 +156,8 @@ class UpstreamTransformerXLSR(nn.Module):
                 outputs.append(logits)
             except Exception as e:
                 print(f"Error processing sample {i}: {e}")
-                # 创建一个零向量作为回退
-                outputs.append(torch.zeros(1, 14).to(self.encoder.device))
+                # 创建一个零向量作为回退（维度为2，匹配二分类任务）
+                outputs.append(torch.zeros(1, 2).to(self.encoder.device))
         
         # 堆叠所有输出
         return torch.cat(outputs, dim=0)

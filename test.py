@@ -32,17 +32,16 @@ parser.add_argument('--upstream_model', type=str, default=LIDConfig.upstream_mod
 parser.add_argument('--unfreeze_last_conv_layers', action='store_true')
 parser.add_argument('--noise_dataset_path', type=str, default=None)
 
-parser = pl.Trainer.add_argparse_args(parser)
 hparams = parser.parse_args()
 
-test_df = pd.read_csv(hparams.test_path)
+test_df = pd.read_csv(hparams.test_path, names=['audiopath', 'class', 'seconds'])
 
 results_df = pd.DataFrame(columns=['audiopath', 'duration', 'class', 'prediction', 'probability'])
 model = LightningModel.load_from_checkpoint(hparams.model_checkpoint, HPARAMS=vars(hparams))
 model.to('cuda')
 model.eval()
 
-num2labels = {0: 'ara-acm', 1: 'ara-apc', 2: 'ara-ary', 3: 'ara-arz', 4: 'eng-gbr', 5: 'eng-usg', 6: 'qsl-pol', 7: 'qsl-rus', 8: 'por-brz', 9: 'spa-car', 10: 'spa-eur', 11: 'spa-lac', 12: 'zho-cmn', 13: 'zho-nan'} 
+num2labels = {0: 'zho-cmn', 1: 'zho-dia'} 
 def convert_to_labels(num):
             return num2labels[num]
 
@@ -65,7 +64,7 @@ for index, row in tqdm(test_df.iterrows()):
     wav_tensor = wav_tensor.to("cuda")
     x_lens = wav_tensor.shape[0]*[wav_tensor.shape[-1]]
     y_hat_l = model(wav_tensor, x_lens)
-    probs = F.softmax(y_hat_l, dim=1).detach().cpu().mean(0).view(1, 14)
+    probs = F.softmax(y_hat_l, dim=1).detach().cpu().mean(0).view(1, 2)
     y_hat_l = probs.argmax(dim=1).detach().cpu().numpy().astype(int)
     probs = probs.numpy().astype(float).tolist()
 
@@ -74,8 +73,11 @@ for index, row in tqdm(test_df.iterrows()):
     trues.append(ground_truths[0])
     preds.append(predictions[0])
 
-    rows = {'audiopath': file_path, 'duration': duration, 'class': ground_truths, 'prediction': predictions, 'probability': probs}
-    results_df = results_df.append(pd.DataFrame(rows))
+    rows = {'audiopath': [file_path], 'duration': [duration], 'class': [ground_truths], 'prediction': [predictions], 'probability': [probs]}
+    results_df = pd.concat([results_df, pd.DataFrame(rows)], ignore_index=True)
 
+# 创建保存结果的目录
+import os
+os.makedirs(os.path.dirname(LIDConfig.results_path), exist_ok=True)
 results_df.to_csv(LIDConfig.results_path, index=False)
 print(accuracy_score(trues, preds), f1_score(trues, preds, average='weighted'))

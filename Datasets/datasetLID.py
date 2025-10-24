@@ -62,21 +62,10 @@ class LIDDataset(Dataset):
         self.CSVPath = CSVPath
         self.data = pd.read_csv(CSVPath).values
         self.is_train = is_train
+        # 只保留数据集中存在的两个语言标签
         self.classes = {
-            'ara-acm': torch.eye(14)[0], 
-            'ara-apc': torch.eye(14)[1], 
-            'ara-ary': torch.eye(14)[2], 
-            'ara-arz': torch.eye(14)[3], 
-            'eng-gbr': torch.eye(14)[4], 
-            'eng-usg': torch.eye(14)[5], 
-            'qsl-pol': torch.eye(14)[6], 
-            'qsl-rus': torch.eye(14)[7], 
-            'por-brz': torch.eye(14)[8], 
-            'spa-car': torch.eye(14)[9], 
-            'spa-eur': torch.eye(14)[10], 
-            'spa-lac': torch.eye(14)[11], 
-            'zho-cmn': torch.eye(14)[12], 
-            'zho-dia': torch.eye(14)[13]
+            'zho-cmn': torch.eye(2)[0],  # 中文普通话
+            'zho-dia': torch.eye(2)[1]   # 中文方言
             }
         # 使用自定义的PadCrop替代wavencoder
         self.train_transform = PadCrop(pad_crop_length=16000*8, pad_position='random', crop_position='random')
