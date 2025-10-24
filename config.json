@@ -1,0 +1,24 @@
+{
+    "dataDir": {
+        "dir": "/root/autodl-tmp/datasets",
+        "train_path": "$dir/train.csv",
+        "test_path": "$dir/test.csv",
+        "val_path": "$dir/val.csv",
+        "results_path": "/root/Langid/results/csv/xlsr-latent-across.csv",
+        "model_checkpoint": ""
+    },
+    "model_parameters": {
+        "batch_size": "8",
+        "epochs": "50", 
+        "lr": "1e-5",
+        "model_type": "UpstreamTransformerXLSR",
+        "upstream_model": "xlsr_300m",
+        "_comment": "upstream model to be loaded from s3prl. Some of the upstream models are: wav2vec2, hubert, TERA, mockingjay",
+        "feature_dim": "1024", 
+        "mixup_type": "latent-mixup-last",
+        "cluster": "across"
+    },
+    "gpu": "1",
+    "run_name": "mixup-latent-across-set",
+    "n_workers": "8"
+}
