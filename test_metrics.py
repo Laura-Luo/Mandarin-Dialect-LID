@@ -9,13 +9,29 @@ from netcal.metrics import ECE
 
 def EER(y, y_softmax_scores):
     # 二分类EER计算
-    y = label_binarize(y, classes=[0, 1])
-    y_softmax_scores = np.array(y_softmax_scores)[:, 1]  # 使用正类的概率
-    
-    fpr, tpr, _ = roc_curve(y, y_softmax_scores)
-    fnr = 1 - tpr
-    eer = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
-    return eer
+    try:
+        # 检查是否只有一个类别
+        if len(np.unique(y)) < 2:
+            print("警告: 样本中只有一个类别，无法计算EER，返回NaN")
+            return np.nan
+        
+        y = label_binarize(y, classes=[0, 1])
+        y_softmax_scores = np.array(y_softmax_scores)[:, 1]  # 使用正类的概率
+        
+        fpr, tpr, _ = roc_curve(y, y_softmax_scores)
+        fnr = 1 - tpr
+        
+        # 检查fpr和fnr是否包含有效数据
+        if len(fpr) == 0 or np.all(np.isnan(fpr)) or np.all(np.isnan(fnr)):
+            print("警告: ROC曲线计算结果无效，无法计算EER，返回NaN")
+            return np.nan
+        
+        # 计算EER
+        eer = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
+        return eer
+    except Exception as e:
+        print(f"计算EER时出错: {str(e)}")
+        return np.nan
     
 def ECEMetric(y, y_softmax_scores):
     y_softmax_scores = np.stack(y_softmax_scores, axis=0)

@@ -46,3 +46,6 @@ class LIDConfig(object):
     # LR of optimizer
     lr = float(config['model_parameters']['lr'])
     run_name = config['run_name']
+    
+    # 是否解冻上游模型的最后几个卷积层
+    unfreeze_last_conv_layers = bool(config['model_parameters'].get('unfreeze_last_conv_layers', False))

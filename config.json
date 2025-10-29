@@ -2,10 +2,10 @@
     "dataDir": {
         "dir": "/root/autodl-tmp/datasets",
         "train_path": "$dir/train.csv",
-        "test_path": "$dir/test.csv",
+        "test_path": "$dir/test2.csv",
         "val_path": "$dir/val.csv",
-        "results_path": "/root/Map-Mix/results/csv/xlsr-3.csv",
-        "model_checkpoint": "/root/Map-Mix/checkpoints/baseline-hubert-3-epoch=epoch=0.ckpt.ckpt"
+        "results_path": "/root/autodl-tmp/datasets/xlsr_test_unseen_result.csv",
+        "model_checkpoint": "/root/Map-Mix/checkpoints/xlsr-unfreeze_last_conv_layers-epoch=epoch=18.ckpt.ckpt"
     },
     "model_parameters": {
         "batch_size": "4",
@@ -13,11 +13,12 @@
         "lr": "1e-5",
         "model_type": "UpstreamTransformerXLSR",
         "upstream_model": "xlsr_300m",
-        "_comment": "upstream model to be loaded from s3prl. Some of the upstream models are: wav2vec2, hubert, TERA, mockingjay",
-        "feature_dim": "1024"
+        "_comment": "upstream model to be loaded from s3prl. Some of the upstream models are: wav2vec2",
+        "feature_dim": "1024",
+        "unfreeze_last_conv_layers": true
     },
     "gpu": "1",
-    "run_name": "baseline-xlsr-3",
+    "run_name": "xlsr-unfreeze_last_conv_layers",
     "n_workers": "8" 
 }
 

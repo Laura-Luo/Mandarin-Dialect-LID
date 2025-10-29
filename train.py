@@ -40,7 +40,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_checkpoint', type=str, default=LIDConfig.model_checkpoint)
     parser.add_argument('--model_type', type=str, default=LIDConfig.model_type)
     parser.add_argument('--upstream_model', type=str, default=LIDConfig.upstream_model)
-    parser.add_argument('--unfreeze_last_conv_layers', action='store_true')
+    parser.add_argument('--unfreeze_last_conv_layers', action='store_true', default=LIDConfig.unfreeze_last_conv_layers)
     parser.add_argument('--noise_dataset_path', type=str, default=None)
     
     hparams = parser.parse_args()
