@@ -45,6 +45,9 @@ class LIDConfig(object):
     
     # LR of optimizer
     lr = float(config['model_parameters']['lr'])
+    mixup_type = config['model_parameters']['mixup_type']
+    cluster = config['model_parameters']['cluster']
+
     run_name = config['run_name']
     
     # 是否解冻上游模型的最后几个卷积层

@@ -10,11 +10,11 @@ import random
 import numpy as np
 
 def collate_fn(batch):
-    (seq, wav_duration, label) = zip(*batch)
+    (seq, wav_duration, label, filenames) = zip(*batch)
     seql = [x.reshape(-1,) for x in seq]
     seq_length = [x.shape[0] for x in seql]
     data = rnn_utils.pad_sequence(seql, batch_first=True, padding_value=0)
-    return data, seq_length, label
+    return data, seq_length, label, filenames
 
 class PadCrop:
     """替代wavencoder的PadCrop功能"""
@@ -61,12 +61,23 @@ class LIDDataset(Dataset):
     ):
         self.CSVPath = CSVPath
         self.data = pd.read_csv(CSVPath).values
+
+        if is_train:
+            self.datacsv = pd.read_csv(CSVPath,names=['audiopath', 'class', 'seconds'])
+            self.datacsv['language'] = self.datacsv['class'].astype(str).str[:3]
+            self.datacsv['dialect'] = self.datacsv['class'].astype(str).str[4:]
+            self.classes_set = set(self.datacsv["class"].values)
+            self.lang_set = set(self.datacsv["language"].values)
+            self.dia_set = set(self.datacsv["dialect"].values)
+
+
         self.is_train = is_train
         # 只保留数据集中存在的两个语言标签
         self.classes = {
             'zho-cmn': torch.eye(2)[0],  # 中文普通话
             'zho-dia': torch.eye(2)[1]   # 中文方言
             }
+        # self.lang2cluster = {0:1, 1:1, 2:1, 3:1, 4:2, 5:2, 6:3, 7:3, 8:4, 9:4, 10:4, 11:4, 12:5, 13:5}
         # 使用自定义的PadCrop替代wavencoder
         self.train_transform = PadCrop(pad_crop_length=16000*8, pad_position='random', crop_position='random')
         self.test_transform = PadCrop(pad_crop_length=16000*20, pad_position='left', crop_position='center')
@@ -86,7 +97,7 @@ class LIDDataset(Dataset):
         lang_tag = self.data[idx][1]
         if lang_tag not in self.classes:
             # 如果标签不存在，使用默认值（例如中文普通话）
-            language = self.classes.get('zho-cmn', torch.eye(14)[12])
+            language = self.classes.get('zho-cmn', torch.eye(2)[0])
             print(f"Warning: Language tag '{lang_tag}' not found, using default")
         else:
             language = self.classes[lang_tag]
@@ -123,4 +134,4 @@ class LIDDataset(Dataset):
             if wav.dim() == 1:
                 wav = wav.unsqueeze(0)
 
-        return wav, torch.FloatTensor([wav_duration]), language
+        return wav, torch.FloatTensor([wav_duration]), language, file
