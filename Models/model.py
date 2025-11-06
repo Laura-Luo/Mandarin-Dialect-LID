@@ -40,8 +40,9 @@ class UpstreamTransformerXLSR(nn.Module):
     def __init__(self, upstream_model='xlsr_300m', feature_dim=1024, unfreeze_last_conv_layers=False):
         super().__init__()
 
+
         self.processor = Wav2Vec2Processor.from_pretrained("/root/autodl-tmp/facebook/wav2vec2-base-960h")
-        self.encoder = Wav2Vec2Model.from_pretrained("/root/autodl-tmp/facebook/wav2vec2-xls-r-300m")
+        self.encoder = Wav2Vec2Model.from_pretrained(upstream_model)
         
         # 首先冻结所有encoder参数
         for param in self.encoder.parameters():

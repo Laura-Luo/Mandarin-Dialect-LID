@@ -47,6 +47,9 @@ class LightningModel(pl.LightningModule):
         winners = y_hat_l.argmax(dim=1)
         corrects = (winners == y_l.argmax(dim=1))
         language_acc = corrects.sum().float() / float( y_hat_l.size(0) )
+        batch_size = x.size(0)  # 获取当前批次的大小
+        self.log('train/loss' , loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
+        self.log('train/acc', language_acc, on_step=False, on_epoch=True, prog_bar=True, batch_size=batch_size)
 
         return {'loss':loss, 
                 'language_acc':language_acc,
@@ -58,9 +61,6 @@ class LightningModel(pl.LightningModule):
         n_batch = len(outputs)
         loss = torch.tensor([x['loss'] for x in outputs]).mean()
         language_acc = torch.tensor([x['language_acc'] for x in outputs]).mean()
-
-        self.log('train/loss' , loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('train/acc',language_acc, on_step=False, on_epoch=True, prog_bar=True)
 
     def validation_step(self, batch, batch_idx):
         x, x_len, y_l = batch
@@ -74,8 +74,9 @@ class LightningModel(pl.LightningModule):
         language_acc = corrects.sum().float() / float( y_hat_l.size(0) )
         
         # 在PyTorch Lightning 2.0+中，直接在step中记录日志
-        self.log('val/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('val/acc', language_acc, on_step=True, on_epoch=True, prog_bar=True)
+        batch_size = x.size(0)  # 获取当前批次的大小
+        self.log('val/loss', loss, on_step=True, on_epoch=True, prog_bar=True, batch_size=batch_size)
+        self.log('val/acc', language_acc, on_step=True, on_epoch=True, prog_bar=True, batch_size=batch_size)
         
         # 返回loss（可选）
         return loss

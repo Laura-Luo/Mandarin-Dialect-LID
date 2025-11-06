@@ -104,7 +104,7 @@ if __name__ == "__main__":
             EarlyStopping(
                 monitor='val/acc',
                 min_delta=0.00,
-                patience=50,
+                patience=20,
                 verbose=True,
                 mode='max' 
                 ),
