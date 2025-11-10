@@ -6,7 +6,7 @@ from torch.utils.data import Dataset
 import torch.nn.utils.rnn as rnn_utils
 
 import torchaudio
-import wavencoder
+# import wavencoder
 import librosa
 import numpy as np
 
@@ -33,6 +33,42 @@ def collate_fn(batch):
     data = rnn_utils.pad_sequence(seql, batch_first=True, padding_value=0)
     return data, seq_length, label
 
+class PadCrop:
+    """替代wavencoder的PadCrop功能"""
+    def __init__(self, pad_crop_length, pad_position='center', crop_position='center'):
+        self.pad_crop_length = pad_crop_length
+        self.pad_position = pad_position
+        self.crop_position = crop_position
+    
+    def __call__(self, wav):
+        # 确保是1D张量
+        if wav.dim() > 1:
+            wav = wav.squeeze(0)
+        
+        current_length = wav.shape[0]
+        
+        # 裁剪逻辑
+        if current_length > self.pad_crop_length:
+            if self.crop_position == 'random':
+                start_idx = random.randint(0, current_length - self.pad_crop_length)
+            elif self.crop_position == 'center':
+                start_idx = (current_length - self.pad_crop_length) // 2
+            else:  # left
+                start_idx = 0
+            return wav[start_idx:start_idx + self.pad_crop_length].unsqueeze(0)
+        
+        # 填充逻辑
+        else:
+            pad_length = self.pad_crop_length - current_length
+            if self.pad_position == 'random':
+                left_pad = random.randint(0, pad_length)
+            elif self.pad_position == 'center':
+                left_pad = pad_length // 2
+            else:  # left
+                left_pad = 0
+            right_pad = pad_length - left_pad
+            
+            return torch.nn.functional.pad(wav, (left_pad, right_pad)).unsqueeze(0)
 
 
 class LIDDataset(Dataset):
@@ -45,35 +81,27 @@ class LIDDataset(Dataset):
         self.CSVPath = CSVPath
         self.data = pd.read_csv(CSVPath).values
         if is_train:
-            self.datacsv = pd.read_csv(CSVPath)
+            self.datacsv = pd.read_csv(CSVPath,names=['audiopath', 'class', 'seconds'])
             self.datacsv['language'] = self.datacsv['class'].astype(str).str[:3]
             self.datacsv['dialect'] = self.datacsv['class'].astype(str).str[4:]
             self.classes_set = set(self.datacsv["class"].values)
-            self.lang_set = set(self.datacsv["language"].values)
-            self.dia_set = set(self.datacsv["dialect"].values)
+            # self.lang_set = set(self.datacsv["language"].values)
+            # self.dia_set = set(self.datacsv["dialect"].values)
 
         # print(self.classes_set)
         self.is_train = is_train
         self.classes = {
-            'ara-acm': torch.eye(14)[0], 
-            'ara-apc': torch.eye(14)[1], 
-            'ara-ary': torch.eye(14)[2], 
-            'ara-arz': torch.eye(14)[3], 
-            'eng-gbr': torch.eye(14)[4], 
-            'eng-usg': torch.eye(14)[5], 
-            'qsl-pol': torch.eye(14)[6], 
-            'qsl-rus': torch.eye(14)[7], 
-            'por-brz': torch.eye(14)[8], 
-            'spa-car': torch.eye(14)[9], 
-            'spa-eur': torch.eye(14)[10], 
-            'spa-lac': torch.eye(14)[11], 
-            'zho-cmn': torch.eye(14)[12], 
-            'zho-nan': torch.eye(14)[13]
+            'zho-cmn': torch.eye(2)[0],  # 中文普通话
+            'zho-dia': torch.eye(2)[1]   # 中文方言
             }
-        self.lang2cluster = {0:1, 1:1, 2:1, 3:1, 4:2, 5:2, 6:3, 7:3, 8:4, 9:4, 10:4, 11:4, 12:5, 13:5}
+    
         # self.upsample = torchaudio.transforms.Resample(orig_freq=8000, new_freq=16000)
-        self.train_transform = wavencoder.transforms.PadCrop(pad_crop_length=16000*8, pad_position='random', crop_position='random')
-        self.test_transform = wavencoder.transforms.PadCrop(pad_crop_length=16000*20, pad_position='left', crop_position='center')
+        # self.train_transform = wavencoder.transforms.PadCrop(pad_crop_length=16000*8, pad_position='random', crop_position='random')
+        # self.test_transform = wavencoder.transforms.PadCrop(pad_crop_length=16000*20, pad_position='left', crop_position='center')
+        # 使用自定义的PadCrop替代wavencoder
+        self.train_transform = PadCrop(pad_crop_length=16000*8, pad_position='random', crop_position='random')
+        self.test_transform = PadCrop(pad_crop_length=16000*20, pad_position='left', crop_position='center')
+
         self.cluster = cluster
 
     def __len__(self):
@@ -146,9 +174,35 @@ class LIDDataset(Dataset):
 
 
 if __name__ == "__main__":
+    print("开始初始化数据集...")
     dataset = LIDDataset(
-        CSVPath = "/root/LRE2017Dataset/LRE2017/lre17-segmented-train-set-5-hour-each-set-1.csv",
+        CSVPath = "/root/autodl-tmp/datasets/unseen_datasets/val.csv",
         hparams = None,
         is_train=True,)
-    _ = dataset[0]
+    print(f"数据集初始化完成，总样本数: {len(dataset)}")
+    
+    # 调试第一个样本
+    print("\n获取第一个样本...")
+    sample = dataset[0]
+    print(f"样本类型: {type(sample)}")
+    print(f"样本长度: {len(sample)}")
+    
+    # 打印每个元素的详细信息
+    print("\n样本组成部分:")
+    print(f"1. wav形状: {sample[0].shape}")
+    print(f"2. mixup_wav形状: {sample[1].shape}")
+    print(f"3. language形状: {sample[2].shape}")
+    print(f"4. mixup_language形状: {sample[3].shape}")
+    print(f"5. wav_duration: {sample[4]}")
+    print(f"6. filename: {sample[5]}")
+    
+    # 检查是否成功应用了mixup
+    is_mixup_applied = not torch.all(sample[1] == 0) and not torch.all(sample[3] == 0)
+    print(f"\nMixup是否成功应用: {is_mixup_applied}")
+    
+    # 尝试获取多个样本
+    print("\n尝试获取多个样本...")
+    for i in range(min(3, len(dataset))):
+        sample = dataset[i]
+        print(f"样本 {i+1}: 文件名={sample[5]}, 标签形状={sample[2].shape}")
         

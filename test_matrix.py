@@ -1,184 +1,163 @@
+# 先执行test.py，生成results.csv
 import pandas as pd
-# import seaborn as sns
-# from utils import ECEMetric, EER
-from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import f1_score, accuracy_score, classification_report, confusion_matrix
 import ast
 import numpy as np
-# sns.set_theme(style="darkgrid")
-from matplotlib.pyplot import ylabel
-import numpy as np
-from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_curve, auc
 from sklearn.preprocessing import label_binarize
 from netcal.metrics import ECE
 
-def EER(y, y_softmax_scores, classes=[0,1,2,3,4,5,6,7,8,9,10,11,12,13]) :
-    y = label_binarize(y, classes=classes)
-    n_classes = 14
-    y_softmax_scores = np.stack(y_softmax_scores, axis=0)
-    total_eer = 0
-    for i in range(n_classes):
-        try:
-            fpr, tpr, _ = roc_curve(y[:, i], y_softmax_scores[:, i])
-            fnr = 1 - tpr
-            eer = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
-            total_eer += eer
-        except:
-            pass
-    
-    average_eer = total_eer/n_classes
-    return average_eer
-
-def Cavg(y, y_pred):
-    # https://www.nist.gov/system/files/documents/2017/09/29/lre17_eval_plan-2017-09-29_v1.pdf
-    # section 3.1
-    ntar = 14
-    cavg_1 = 0.0
-    beta_1 = 1.0
-
-    cavg_2 = 0.0
-    beta_2 = 9.0
-
-    P_FA = np.zeros((ntar,ntar)).astype(float)
-    P_Miss = np.zeros((ntar,)).astype(float)
-
-    for i, label in enumerate(y):
-        pred_label = y_pred[i]
-        if(label != pred_label):
-            P_FA[label][pred_label] += 1
-            P_Miss[label] += 1
-
-    tar_count = np.array([y.count(i) for i in range(ntar)])
-    print(P_FA)
-    print(tar_count)
-
-    # get probabilities
-    P_FA /= tar_count.reshape(1, -1).transpose()
-    P_Miss /= tar_count
-
-    print(P_FA)
-    print(P_Miss)
-
-    for i in range(ntar):
-        cavg_1 += P_Miss[i]
-        cavg_2 += P_Miss[i]
+def EER(y, y_softmax_scores):
+    # 二分类EER计算
+    try:
+        # 检查是否只有一个类别
+        if len(np.unique(y)) < 2:
+            print("警告: 样本中只有一个类别，无法计算EER，返回NaN")
+            return np.nan
         
-        for j in range(ntar):
-            cavg_1 += (beta_1/(ntar-1))*P_FA[i][j]
-            cavg_2 += (beta_2/(ntar-1))*P_FA[i][j]
-
-    cavg_1 /= ntar
-    cavg_2 /= ntar
-    
-    c_primary = (cavg_1 + cavg_2)/2
-    return c_primary
+        y = label_binarize(y, classes=[0, 1])
+        y_softmax_scores = np.array(y_softmax_scores)[:, 1]  # 使用正类的概率
+        
+        fpr, tpr, _ = roc_curve(y, y_softmax_scores)
+        fnr = 1 - tpr
+        
+        # 检查fpr和fnr是否包含有效数据
+        if len(fpr) == 0 or np.all(np.isnan(fpr)) or np.all(np.isnan(fnr)):
+            print("警告: ROC曲线计算结果无效，无法计算EER，返回NaN")
+            return np.nan
+        
+        # 计算EER
+        eer = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
+        return eer
+    except Exception as e:
+        print(f"计算EER时出错: {str(e)}")
+        return np.nan
     
 def ECEMetric(y, y_softmax_scores):
     y_softmax_scores = np.stack(y_softmax_scores, axis=0)
     ece = ECE(10)
     return ece.measure(y_softmax_scores, y)
 
+# 加载测试结果文件（假设结果保存在config中配置的路径）
+from config import LIDConfig
+results_df = pd.read_csv(LIDConfig.results_path)
 
-set_1 = pd.read_csv('/root/Langid/results/csv/xlsr-latent-across-1.csv')
-set_2 = pd.read_csv('/root/Langid/results/csv/xlsr-latent-across-2.csv')
-set_3 = pd.read_csv('/root/Langid/results/csv/xlsr-latent-across-3.csv')
-
-label2num = {'ara-acm': 0, 'ara-apc': 1, 'ara-ary': 2, 'ara-arz': 3, 'eng-gbr': 4, 'eng-usg': 5, 'qsl-pol': 6, 'qsl-rus': 7, 'por-brz': 8, 'spa-car': 9, 'spa-eur': 10, 'spa-lac': 11, 'zho-cmn': 12, 'zho-nan': 13}
-num2cluster = {0:1, 1:1, 2:1, 3:1, 4:2, 5:2, 6:3, 7:3, 8:4, 9:4, 10:4, 11:4, 12:5, 13:5}
-
-clusters = [['arabic',[0,1,2,3]], ['english',[4,5]], ['slavic',[6,7]], ['iberian',[8,9,10,11]], ['chinese',[12,13]]]
-
-
-def cluster_accuracy(df):
-    true_cluster = []
-    predicted_cluster = []
-    for i in range(len(df)):
-        true_cluster.append(num2cluster[label2num[df.loc[i, 'class']]])
-        predicted_cluster.append(num2cluster[label2num[df.loc[i, 'prediction']]])
-
-    return accuracy_score(true_cluster, predicted_cluster)
-
-
-def get_cluster_wise(df):
-    scores = []
-    for i in range(len(clusters)):
-        true = []
-        predicted = []
-        for k in range(len(df)):
-            if label2num[df.loc[k, 'class']] in clusters[i][1]:
-                true.append(df.loc[k,'class'])
-                predicted.append(df.loc[k, 'prediction'])
-        scores.append(accuracy_score(true, predicted))
-    return scores
+# 标签映射
+def label2num(label):
+    # 处理字符串形式的列表，如"['zho-dia']"
+    if isinstance(label, str) and label.startswith('[') and label.endswith(']'):
+        import ast
+        label_list = ast.literal_eval(label)
+        label = label_list[0] if isinstance(label_list, list) and len(label_list) > 0 else label
+    
+    if label == 'zho-cmn':
+        return 0
+    elif label == 'zho-dia':
+        return 1
+    else:
+        raise ValueError(f"Unknown label: {label}")
 
 
 def get_ece(df):
     probs = []
     y_true = []
     for i in range(len(df)):
-        probs.append(np.array(ast.literal_eval(df.loc[i, 'probability'])))
-        y_true.append(label2num[df.loc[i, 'class']])
+        # 处理嵌套列表格式的概率
+        prob_data = ast.literal_eval(df.loc[i, 'probability'])
+        if isinstance(prob_data[0], list):
+            # 如果是嵌套列表，取第一个元素
+            probs.append(np.array(prob_data[0]))
+        else:
+            probs.append(np.array(prob_data))
+        # 处理class列
+        class_value = df.loc[i, 'class']
+        y_true.append(label2num(class_value))
     y_true = np.array(y_true)
     return ECEMetric(y_true, probs)
 
 
+
+
 def metrics(df):
-    language_true_3 = []
-    language_pred_3 = []
-    language_softmax_3 = []
-
-    language_true_10 = []
-    language_pred_10 = []
-    language_softmax_10 = []
-
-    language_true_30 = []
-    language_pred_30 = []
-    language_softmax_30 = []
-
+    # 按不同时长分组的评估
+    duration_groups = {'short': 3, 'medium': 10, 'long': 30}
+    duration_results = {}
+    
+    # 整体评估
+    y_true = [label2num(cls) for cls in list(df['class'])]
+    y_pred = [label2num(pred) for pred in list(df['prediction'])]
+    
+    # 获取概率值
+    y_probs = []
     for i in range(len(df)):
-        if(int(df.loc[i,'duration']) == 3):
-            language_pred_3.append(df.loc[i, 'prediction'])
-            language_true_3.append(df.loc[i, 'class'])
-            language_softmax_3.append(ast.literal_eval(df.loc[i, 'probability']))
-        if(int(df.loc[i,'duration']) == 10):
-            language_pred_10.append(df.loc[i, 'prediction'])
-            language_true_10.append(df.loc[i, 'class'])
-            language_softmax_10.append(ast.literal_eval(df.loc[i, 'probability']))
-        if(int(df.loc[i,'duration']) == 30):
-            language_pred_30.append(df.loc[i, 'prediction'])
-            language_true_30.append(df.loc[i, 'class'])
-            language_softmax_30.append(ast.literal_eval(df.loc[i, 'probability']))
-
-    acc = accuracy_score(list(df['class']), list(df['prediction']))
-    f1 = f1_score(list(df['class']), list(df['prediction']), average='weighted')
-    cluster_acc = cluster_accuracy(df)
+        prob_data = ast.literal_eval(df.loc[i, 'probability'])
+        if isinstance(prob_data[0], list):
+            prob_array = np.array(prob_data[0])
+        else:
+            prob_array = np.array(prob_data)
+        y_probs.append(prob_array)
+    
+    # 计算整体指标
+    acc = accuracy_score(y_true, y_pred)
+    f1_weighted = f1_score(y_true, y_pred, average='weighted')
+    f1_macro = f1_score(y_true, y_pred, average='macro')
+    f1_micro = f1_score(y_true, y_pred, average='micro')
     ece = get_ece(df)
-    lang_3 = accuracy_score(language_true_3, language_pred_3)
-    lang_10 = accuracy_score(language_true_10, language_pred_10)
-    lang_30 = accuracy_score(language_true_30, language_pred_30)
-    cluster_wise_scores = get_cluster_wise(df)
-    # eer = EER()
-    print(f"Accuracy: {acc}")
-    print(f"Weighted F1: {f1}")
-    print(f"Cluster Accuracy: {cluster_acc}")
-    print(f"ECE: {ece}")
-    # print(f"EER: {eer}")
-    print(f"Language 3/10/30 seconds: {lang_3}, {lang_10}, {lang_30}")
-    print(f"Cluster wise scores: {cluster_wise_scores}\n------")
-    return acc, f1, cluster_acc, ece, lang_3, lang_10, lang_30, cluster_wise_scores
+    
+    # 计算EER
+    eer = EER(y_true, y_probs)
+    
+    # 计算混淆矩阵
+    cm = confusion_matrix(y_true, y_pred)
+    
+    # 按时长分组评估
+    for group_name, duration in duration_groups.items():
+        # 修正：使用近似匹配，因为duration是浮点数
+        group_df = df[np.abs(df['duration'].astype(float) - duration) < 0.5]
+        if len(group_df) > 0:
+            group_true = [label2num(cls) for cls in list(group_df['class'])]
+            group_pred = [label2num(pred) for pred in list(group_df['prediction'])]
+            duration_results[group_name] = {
+                'accuracy': accuracy_score(group_true, group_pred),
+                'f1_weighted': f1_score(group_true, group_pred, average='weighted'),
+                'count': len(group_df)
+            }
+    
+    # 打印结果
+    print("===== 二分类任务评估结果 =====")
+    print(f"整体准确率: {acc:.4f}")
+    print(f"F1分数 (weighted): {f1_weighted:.4f}")
+    print(f"F1分数 (macro): {f1_macro:.4f}")
+    print(f"F1分数 (micro): {f1_micro:.4f}")
+    print(f"ECE (预期校准误差): {ece:.4f}")
+    print(f"EER (等错误率): {eer:.4f}")
+    print("\n分类报告:")
+    print(classification_report(y_true, y_pred, target_names=['zho-cmn', 'zho-dia']))
+    print("\n混淆矩阵:")
+    print(cm)
+    
+    print("\n按时长分组结果:")
+    for group_name, results in duration_results.items():
+        print(f"{group_name} (时长={duration_groups[group_name]}秒): 准确率={results['accuracy']:.4f}, F1={results['f1_weighted']:.4f}, 样本数={results['count']}")
+    
+    return acc, f1_weighted, ece, eer, duration_results
 
-print("Set 1")
-a1, f1, c1, e1, l3_1, l10_1, l30_1, cluster_wise_1 = metrics(set_1)
-print("Set 2")
-a2, f2, c2, e2, l3_2, l10_2, l30_2, cluster_wise_2 = metrics(set_2)
-print("Set 3")
-a3, f3, c3, e3, l3_3, l10_3, l30_3, cluster_wise_3 = metrics(set_3)
-
-avg_cluster_wise = (np.array(cluster_wise_1) + np.array(cluster_wise_2) + np.array(cluster_wise_3))/3
-
-print("Average")
-print(f"Accuracy: {(a1 + a2 + a3)/3}")
-print(f"Weighted F1: {(f1 + f2 + f3)/3}")
-print(f"Cluster Accuracy: {(c1 + c2 + c3)/3}")
-print(f"ECE: {(e1 + e2 + e3)/3}")
-print(f"Lang 3: {(l3_1 + l3_2 + l3_3)/3}, Lang 10: {(l10_1 + l10_2 + l10_3)/3} Lang 30: {((l30_1 + l30_2 + l30_3)/3)}")
-print(f"Cluster wise scores: {avg_cluster_wise}")
+# 执行评估
+if __name__ == "__main__":
+    print("开始评估二分类模型性能...")
+    acc, f1_weighted, ece, eer, duration_results = metrics(results_df)
+    print("\n评估完成!")
+    
+    # 保存评估结果
+    eval_results = {
+        'accuracy': acc,
+        'f1_weighted': f1_weighted,
+        'ece': ece,
+        'eer': eer,
+        'duration_results': duration_results
+    }
+    
+    # 可以将结果保存到文件
+    import json
+    with open('evaluation_results.json', 'w', encoding='utf-8') as f:
+        json.dump(eval_results, f, ensure_ascii=False, indent=2)

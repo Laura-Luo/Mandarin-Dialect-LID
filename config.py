@@ -1,8 +1,13 @@
 import os
 import json
 
-with open("config.json", "r") as jsonfile:
+# 获取脚本所在目录的绝对路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# 构建配置文件的绝对路径
+config_path = os.path.join(script_dir, "config.json")
+with open(config_path, "r") as jsonfile:
     config = json.load(jsonfile)
+
 
 class LIDConfig(object):
 
@@ -42,5 +47,7 @@ class LIDConfig(object):
     lr = float(config['model_parameters']['lr'])
     mixup_type = config['model_parameters']['mixup_type']
     cluster = config['model_parameters']['cluster']
+    # 是否解冻上游模型的最后几个卷积层
+    unfreeze_last_conv_layers = bool(config['model_parameters'].get('unfreeze_last_conv_layers', False))
 
     run_name = config['run_name']

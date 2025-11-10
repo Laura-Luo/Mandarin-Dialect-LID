@@ -42,7 +42,7 @@ if __name__ == "__main__":
     parser.add_argument('--upstream_model', type=str, default=LIDConfig.upstream_model)
     parser.add_argument('--mixup_type', type=str, default=LIDConfig.mixup_type)
     parser.add_argument('--cluster', type=str, default=LIDConfig.cluster)
-    parser.add_argument('--unfreeze_last_conv_layers', action='store_true')
+    parser.add_argument('--unfreeze_last_conv_layers', action='store_true', default=LIDConfig.unfreeze_last_conv_layers)
     parser.add_argument('--noise_dataset_path', type=str, default=None)
     
     hparams = parser.parse_args()
@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
     logger = WandbLogger(
         name=LIDConfig.run_name,
-        project='LangID-mixup'
+        project='LangID'
     )
     
     HPARAMS= vars(hparams)
@@ -95,21 +95,22 @@ if __name__ == "__main__":
         mode='max',
         verbose=1,
         filename=LIDConfig.run_name + "-epoch={epoch}.ckpt",
-        save_top_k=2
+        save_top_k=3
         )
 
     # lr_monitor = LearningRateMonitor(logging_interval='step')
 
     trainer = Trainer(
         fast_dev_run=hparams.dev, 
-        gpus=hparams.gpu, 
+        devices=hparams.gpu,
+        accelerator='gpu' if hparams.gpu > 0 else 'cpu',
+        accumulate_grad_batches=4,
         max_epochs=hparams.epochs, 
-        checkpoint_callback=True,
         callbacks=[
             EarlyStopping(
                 monitor='val/acc',
                 min_delta=0.00,
-                patience=50,
+                patience=20,
                 verbose=True,
                 mode='max'
                 ),

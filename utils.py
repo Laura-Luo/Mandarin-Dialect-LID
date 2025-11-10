@@ -24,9 +24,9 @@ from sklearn.metrics import roc_curve
 from sklearn.preprocessing import label_binarize
 # from netcal.metrics import ECE
 
-def EER(y, y_softmax_scores, classes=[0,1,2,3,4,5,6,7,8,9,10,11,12,13]) :
+def EER(y, y_softmax_scores, classes=[0,1]) :
     y = label_binarize(y, classes=classes)
-    n_classes = 14
+    n_classes = 2
     y_softmax_scores = np.stack(y_softmax_scores, axis=0)
     total_eer = 0
     for i in range(n_classes):
@@ -44,7 +44,7 @@ def EER(y, y_softmax_scores, classes=[0,1,2,3,4,5,6,7,8,9,10,11,12,13]) :
 def Cavg(y, y_pred):
     # https://www.nist.gov/system/files/documents/2017/09/29/lre17_eval_plan-2017-09-29_v1.pdf
     # section 3.1
-    ntar = 14
+    ntar = 2
     cavg_1 = 0.0
     beta_1 = 1.0
 

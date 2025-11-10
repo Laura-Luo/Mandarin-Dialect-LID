@@ -65,7 +65,7 @@ for index, row in tqdm(test_df.iterrows()):
 
     wav_tensor = wav_tensor.to("cuda")
     x_lens = wav_tensor.shape[0]*[wav_tensor.shape[-1]]
-    y_hat_l = model(wav_tensor, x_lens)
+    y_hat_l = model.simple_forward(wav_tensor, x_lens)
     probs = F.softmax(y_hat_l, dim=1).detach().cpu().mean(0).view(1, 2)
     y_hat_l = probs.argmax(dim=1).detach().cpu().numpy().astype(int)
     probs = probs.numpy().astype(float).tolist()

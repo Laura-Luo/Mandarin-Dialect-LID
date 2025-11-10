@@ -6,7 +6,7 @@ import numpy as np
 import pytorch_lightning as pl
 from torchmetrics import Accuracy
 from torchmetrics import F1Score
-from pl_bolts.optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
+# from pl_bolts.optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
 
 # from Models.model import UpstreamTransformerXLSR
 from utils import CrossEntropyLoss
@@ -46,28 +46,34 @@ class LightningModel(pl.LightningModule):
         # HPARAMS
         self.save_hyperparameters()
 
-        self.processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-        self.encoder = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-xls-r-300m")
+        self.processor = Wav2Vec2Processor.from_pretrained("/root/autodl-tmp/facebook/wav2vec2-base-960h")
+        self.encoder = Wav2Vec2Model.from_pretrained(HPARAMS['upstream_model'])
 
+        # 首先冻结所有encoder参数
         for param in self.encoder.parameters():
-            param.requires_grad = True
+            param.requires_grad = False
         
-        for param in self.encoder.encoder.layers.parameters():
-            param.requires_grad = True
+        # 数据量稀少，只解冻最后几层卷积层
+        if HPARAMS['unfreeze_last_conv_layers']:
+            for param in self.encoder.feature_extractor.conv_layers[5:].parameters():
+                param.requires_grad = True
 
         self.attn_pool = SelfAttentionPooling(HPARAMS['feature_dim'])
 
         self.language_classifier = nn.Sequential(
             nn.Linear(HPARAMS['feature_dim'], 512),
             nn.ReLU(),
-            nn.Linear(512, 14)
+            nn.Linear(512, 2)
         )
 
         self.classification_criterion = CrossEntropyLoss()
-        self.accuracy_metric = Accuracy()
-        self.f1_metric = F1Score()
+        self.accuracy_metric = Accuracy(task="binary")
+        self.f1_metric = F1Score(task="binary")
         self.lr = HPARAMS['lr']
         self.mixup_type = HPARAMS['mixup_type']
+
+        self.training_step_outputs = []
+        self.validation_step_outputs = []
 
         print(f"Model Details: #Params = {self.count_total_parameters()}\t#Trainable Params = {self.count_trainable_parameters()}")
 
@@ -133,20 +139,24 @@ class LightningModel(pl.LightningModule):
         language_acc = corrects.sum().float() / float( y_hat_l.size(0) )
         train_step_acc = self.accuracy_metric(y_hat_l.argmax(dim=1), y_l.argmax(dim=1))
         loss = language_loss
-        self.log("train/acc", train_step_acc, on_step=False, on_epoch=True)
+        self.log("train/step_acc", train_step_acc, on_step=False, on_epoch=True)
+        # self.log('train/loss' , loss, on_step=False, on_epoch=True, prog_bar=True)
+        # self.log('train/acc', language_acc, on_step=False, on_epoch=True, prog_bar=True)
 
-        return {'loss':loss, 
+        outputs = {'loss':loss, 
                 'language_acc':language_acc,
                 'probs': probs.detach().cpu().numpy(),
                 'labels': y_l.argmax(dim=1).detach().cpu().numpy().astype(int),
                 }
-    
-    def training_epoch_end(self, outputs):
-        n_batch = len(outputs)
-        loss = torch.tensor([x['loss'] for x in outputs]).mean()
-        language_acc = torch.tensor([x['language_acc'] for x in outputs]).mean()
+        self.training_step_outputs.append(outputs)
+        return outputs
 
-        self.log('train/loss' , loss, on_step=False, on_epoch=True, prog_bar=True)
+    def on_train_epoch_end(self):
+        loss = torch.tensor([x['loss'] for x in self.training_step_outputs]).mean()
+        language_acc = torch.tensor([x['language_acc'] for x in self.training_step_outputs]).mean()
+        self.log('train/loss' ,loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('train/acc', language_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.training_step_outputs.clear()
 
     def validation_step(self, batch, batch_idx):
         x, x_len, y_l = batch
@@ -160,17 +170,18 @@ class LightningModel(pl.LightningModule):
         language_acc = corrects.sum().float() / float( y_hat_l.size(0) )
 
         val_step_acc = self.accuracy_metric(y_hat_l.argmax(dim=1), y_l.argmax(dim=1))
-        self.log("val/acc", val_step_acc, on_step=False, on_epoch=True)
+        self.log("val/step_acc", val_step_acc, on_step=False, on_epoch=True)
 
         loss = language_loss
+        # self.log('val/loss' , loss, on_step=False, on_epoch=True, prog_bar=True)
+        outputs = {'val_loss':loss, 'val_language_acc':language_acc}
+        self.validation_step_outputs.append(outputs)
+        return outputs
 
-        return {'val_loss':loss, 
-                'val_language_acc':language_acc,
-                }
-
-    def validation_epoch_end(self, outputs):
-        val_loss = torch.tensor([x['val_loss'] for x in outputs]).mean()
-        language_acc = torch.tensor([x['val_language_acc'] for x in outputs]).mean()
+    def on_validation_epoch_end(self):
+        val_loss = torch.tensor([x['val_loss'] for x in self.validation_step_outputs]).mean()
+        language_acc = torch.tensor([x['val_language_acc'] for x in self.validation_step_outputs]).mean()
         
-        self.log('val/loss' , val_loss, on_step=False, on_epoch=True, prog_bar=True)
-        # self.log('val/acc',language_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('val/loss',val_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('val/acc',language_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.validation_step_outputs.clear()
